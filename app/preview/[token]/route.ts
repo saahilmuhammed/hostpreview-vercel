@@ -3,13 +3,14 @@ import { getMapping } from '../../api/preview-link/route';
 
 export const dynamic = 'force-dynamic';
 
+// Note: params is now a Promise<{ token: string }>
 export async function GET(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  context: { params: Promise<{ token: string }> }
 ) {
-  const token = params.token;
-  const mapping = getMapping(token);
+  const { token } = await context.params; // await the params
 
+  const mapping = getMapping(token);
   if (!mapping) {
     return new NextResponse('Invalid or expired preview token', { status: 404 });
   }
@@ -41,4 +42,3 @@ export async function GET(
     headers,
   });
 }
-
