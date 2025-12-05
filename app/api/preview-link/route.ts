@@ -4,7 +4,7 @@ type Mapping = {
   domain: string;
   ip: string;
   protocol: 'http' | 'https';
-  path: string;
+  path: string;              // always starts with "/"
 };
 
 const mappings = new Map<string, Mapping>(); // in-memory (demo only)
@@ -25,9 +25,15 @@ export async function POST(req: NextRequest) {
 
   const domain = String(body.domain || '').trim();
   const ip = String(body.ip || '').trim();
-  const rawProtocol = String(body.protocol || 'https').trim().toLowerCase();
-  const protocol: 'http' | 'https' = rawProtocol === 'http' ? 'http' : 'https';
-  const path = (String(body.path || '/').trim() || '/') as string;
+
+  const rawProtocol = String(body.protocol || '').trim().toLowerCase();
+  const protocol: 'http' | 'https' =
+    rawProtocol === 'http' || rawProtocol === 'https' ? rawProtocol : 'https';
+
+  const rawPath = (body.path ?? '').toString().trim();
+  // default to "/", ensure leading slash when not empty
+  const path =
+    rawPath === '' ? '/' : rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
 
   if (!validateDomain(domain)) {
     return NextResponse.json({ detail: 'Invalid domain' }, { status: 400 });
@@ -45,4 +51,3 @@ export async function POST(req: NextRequest) {
 export function getMapping(token: string) {
   return mappings.get(token) || null;
 }
-
