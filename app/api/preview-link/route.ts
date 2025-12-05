@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
 
   const domain = String(body.domain || '').trim();
   const ip = String(body.ip || '').trim();
+
   const rawProtocol = String(body.protocol || '').trim().toLowerCase();
   const protocol: 'http' | 'https' =
     rawProtocol === 'http' || rawProtocol === 'https' ? rawProtocol : 'https';
