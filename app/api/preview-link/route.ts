@@ -1,50 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMapping } from '../../api/preview-link/route';
 
-export const dynamic = 'force-dynamic';
+export type Mapping = {
+  domain: string;
+  ip: string;
+  protocol: 'http' | 'https';
+  path: string; // always starts with "/"
+};
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ token: string }> }
-) {
-  const { token } = await context.params;
+const mappings = new Map<string, Mapping>(); // in-memory (demo only)
 
-  const mapping = getMapping(token);
-  if (!mapping) {
-    return new NextResponse('Invalid or expired preview token', { status: 404 });
+function validateDomain(domain: string) {
+  return /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i.test(domain);
+}
+
+function validateIP(ip: string) {
+  return /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(
+    ip,
+  );
+}
+
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ detail: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { domain, ip, protocol, path } = mapping;
+  const domain = String(body.domain || '').trim();
+  const ip = String(body.ip || '').trim();
 
-  // Always call the IP, but use Host: domain (like your curl)
-  const upstreamUrl = `${protocol}://${ip}${path}`;
+  const rawProtocol = String(body.protocol || '').trim().toLowerCase();
+  const protocol: 'http' | 'https' =
+    rawProtocol === 'http' || rawProtocol === 'https' ? rawProtocol : 'https';
 
-  try {
-    const upstreamResp = await fetch(upstreamUrl, {
-      // Important: Host header must be the domain, not the IP
-      headers: {
-        Host: domain,
-        'User-Agent': req.headers.get('user-agent') || 'HostPreview-Vercel',
-      },
-      // Let Vercel negotiate HTTP/1.1 vs HTTP/2 automatically
-      redirect: 'follow',
-    });
+  const rawPath = (body.path ?? '').toString().trim();
+  const path =
+    rawPath === '' ? '/' : rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
 
-    const headers = new Headers(upstreamResp.headers);
-    headers.set('x-hostpreview-origin', `${domain}@${ip}`);
-    headers.delete('content-security-policy');
-    headers.delete('x-frame-options');
-
-    return new NextResponse(upstreamResp.body, {
-      status: upstreamResp.status,
-      statusText: upstreamResp.statusText,
-      headers,
-    });
-  } catch (e: any) {
-    console.error('Upstream fetch failed', upstreamUrl, e?.message || e);
-    return new NextResponse(
-      'Error connecting to upstream: fetch failed',
-      { status: 502 }
-    );
+  if (!validateDomain(domain)) {
+    return NextResponse.json({ detail: 'Invalid domain' }, { status: 400 });
   }
+
+  if (!validateIP(ip)) {
+    return NextResponse.json({ detail: 'Invalid IP' }, { status: 400 });
+  }
+
+  const token = `hp_${Math.random().toString(36).slice(2, 10)}`;
+  mappings.set(token, { domain, ip, protocol, path });
+
+  return NextResponse.json({ previewUrl: `/preview/${token}` });
+}
+
+export function getMapping(token: string) {
+  return mappings.get(token) || null;
 }
