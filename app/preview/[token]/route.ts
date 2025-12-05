@@ -1,3 +1,4 @@
+// app/preview/[token]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getMapping } from '../../api/preview-link/route';
 
