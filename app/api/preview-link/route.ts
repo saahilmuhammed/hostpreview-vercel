@@ -1,3 +1,4 @@
+// app/api/preview-link/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
 export type Mapping = {
