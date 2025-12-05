@@ -16,38 +16,33 @@ export async function GET(
 
   const { domain, ip, protocol, path } = mapping;
 
-  // For now, still use the IP for preview-before-DNS,
-  // but you can flip useIp = false if DNS already points correctly.
-  const useIp = true;
-  const hostForUrl = useIp ? ip : domain;
+  // Always use the IP in the URL, Host = domain (like your working curl)
+  const upstreamUrl = `${protocol}://${ip}${path}`;
 
-  const upstreamUrl = `${protocol}://${hostForUrl}${path}`;
-
-  let upstreamResp: Response;
   try {
-    upstreamResp = await fetch(upstreamUrl, {
+    const upstreamResp = await fetch(upstreamUrl, {
       headers: {
-        ...(useIp ? { Host: domain } : {}),
+        Host: domain, // critical: this must be the domain, not the IP
         'User-Agent': req.headers.get('user-agent') || 'HostPreview-Vercel',
       },
       redirect: 'follow',
     });
+
+    const headers = new Headers(upstreamResp.headers);
+    headers.set('x-hostpreview-origin', `${domain}@${ip}`);
+    headers.delete('content-security-policy');
+    headers.delete('x-frame-options');
+
+    return new NextResponse(upstreamResp.body, {
+      status: upstreamResp.status,
+      statusText: upstreamResp.statusText,
+      headers,
+    });
   } catch (e: any) {
     console.error('Upstream fetch failed', upstreamUrl, e?.message || e);
     return new NextResponse(
-      `Error connecting to upstream: fetch failed`,
+      'Error connecting to upstream: fetch failed',
       { status: 502 }
     );
   }
-
-  const headers = new Headers(upstreamResp.headers);
-  headers.set('x-hostpreview-origin', `${domain}@${ip}`);
-  headers.delete('content-security-policy');
-  headers.delete('x-frame-options');
-
-  return new NextResponse(upstreamResp.body, {
-    status: upstreamResp.status,
-    statusText: upstreamResp.statusText,
-    headers,
-  });
 }
