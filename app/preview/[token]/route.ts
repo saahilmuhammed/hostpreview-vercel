@@ -8,21 +8,18 @@ export async function GET(
   context: { params: Promise<{ token: string }> }
 ) {
   const { token } = await context.params;
-
   const mapping = getMapping(token);
   if (!mapping) {
     return new NextResponse('Invalid or expired preview token', { status: 404 });
   }
 
   const { domain, ip, protocol, path } = mapping;
-
-  // Always use the IP in the URL, Host = domain (like your working curl)
   const upstreamUrl = `${protocol}://${ip}${path}`;
 
   try {
     const upstreamResp = await fetch(upstreamUrl, {
       headers: {
-        Host: domain, // critical: this must be the domain, not the IP
+        Host: domain,
         'User-Agent': req.headers.get('user-agent') || 'HostPreview-Vercel',
       },
       redirect: 'follow',
@@ -40,9 +37,8 @@ export async function GET(
     });
   } catch (e: any) {
     console.error('Upstream fetch failed', upstreamUrl, e?.message || e);
-    return new NextResponse(
-      'Error connecting to upstream: fetch failed',
-      { status: 502 }
-    );
+    return new NextResponse('Error connecting to upstream: fetch failed', {
+      status: 502,
+    });
   }
 }
