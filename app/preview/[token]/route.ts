@@ -1,45 +1,47 @@
-// app/preview/[token]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { getMapping } from '../../api/preview-link/route';
+"use client";
 
-export const dynamic = 'force-dynamic';
+import { useEffect, useState } from "react";
 
-export async function GET(
-  req: NextRequest,
-  context: { params: Promise<{ token: string }> }
-) {
-  const { token } = await context.params;
-  const mapping = getMapping(token);
-  if (!mapping) {
-    return new NextResponse('Invalid or expired preview token', { status: 404 });
-  }
+export default function PreviewPage({ params }) {
+  const { slug } = params;
+  const [html, setHtml] = useState("");
+  const [error, setError] = useState("");
 
-  const { domain, ip, protocol, path } = mapping;
-  const upstreamUrl = `${protocol}://${ip}${path}`;
+  useEffect(() => {
+    const data = JSON.parse(localStorage.getItem(`preview-${slug}`));
 
-  try {
-    const upstreamResp = await fetch(upstreamUrl, {
-      headers: {
-        Host: domain,
-        'User-Agent': req.headers.get('user-agent') || 'HostPreview-Vercel',
-      },
-      redirect: 'follow',
-    });
+    if (!data) {
+      setError("Preview data not found.");
+      return;
+    }
 
-    const headers = new Headers(upstreamResp.headers);
-    headers.set('x-hostpreview-origin', `${domain}@${ip}`);
-    headers.delete('content-security-policy');
-    headers.delete('x-frame-options');
+    fetch("/api/preview-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        domain: data.domain,
+        ip: data.ip,
+        path: `/${slug}`,
+      }),
+    })
+      .then((res) => res.text())
+      .then(setHtml)
+      .catch(() =>
+        setError("Failed to load preview from origin server.")
+      );
+  }, [slug]);
 
-    return new NextResponse(upstreamResp.body, {
-      status: upstreamResp.status,
-      statusText: upstreamResp.statusText,
-      headers,
-    });
-  } catch (e: any) {
-    console.error('Upstream fetch failed', upstreamUrl, e?.message || e);
-    return new NextResponse('Error connecting to upstream: fetch failed', {
-      status: 502,
-    });
-  }
+  if (error) return <div>{error}</div>;
+
+  return (
+    <iframe
+      sandbox="allow-same-origin allow-scripts allow-forms"
+      style={{
+        width: "100%",
+        height: "100vh",
+        border: "none",
+      }}
+      srcDoc={html}
+    />
+  );
 }
