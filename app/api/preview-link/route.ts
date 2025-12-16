@@ -1,53 +1,49 @@
-// app/api/preview-link/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 
-export type Mapping = {
-  domain: string;
-  ip: string;
-  protocol: 'http' | 'https';
-  path: string;
-};
+export async function POST(req) {
+  try {
+    const { domain, ip, path = "/" } = await req.json();
 
-const mappings = new Map<string, Mapping>();
+    if (!domain || !ip) {
+      return NextResponse.json(
+        { error: "Domain and IP are required" },
+        { status: 400 }
+      );
+    }
 
-function validateDomain(domain: string) {
-  return /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i.test(domain);
-}
+    // Force HTTP – HTTPS via IP will fail on Vercel
+    const upstreamUrl = `http://${ip}${path}`;
 
-function validateIP(ip: string) {
-  return /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ip);
-}
+    const upstreamRes = await fetch(upstreamUrl, {
+      method: "GET",
+      headers: {
+        Host: domain,
+        "User-Agent": "Mozilla/5.0 (HostPreview)",
+        Accept: "*/*",
+      },
+      redirect: "manual",
+    });
 
-export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  if (!body) {
-    return NextResponse.json({ detail: 'Invalid JSON' }, { status: 400 });
+    let body = await upstreamRes.text();
+    const contentType =
+      upstreamRes.headers.get("content-type") || "text/html";
+
+    // Fix relative assets (CSS/JS/images)
+    if (contentType.includes("text/html")) {
+      body = body.replace(
+        "<head>",
+        `<head><base href="http://${ip}/">`
+      );
+    }
+
+    return new Response(body, {
+      status: upstreamRes.status,
+      headers: {
+        "Content-Type": contentType,
+      },
+    });
+  } catch (err) {
+    console.error("Upstream fetch failed:", err);
+    return new Response("Upstream fetch failed", { status: 502 });
   }
-
-  const domain = String(body.domain || '').trim();
-  const ip = String(body.ip || '').trim();
-
-  const rawProtocol = String(body.protocol || '').trim().toLowerCase();
-  const protocol: 'http' | 'https' =
-    rawProtocol === 'http' || rawProtocol === 'https' ? rawProtocol : 'https';
-
-  const rawPath = (body.path ?? '').toString().trim();
-  const path =
-    rawPath === '' ? '/' : rawPath.startsWith('/') ? rawPath : `/${rawPath}`;
-
-  if (!validateDomain(domain)) {
-    return NextResponse.json({ detail: 'Invalid domain' }, { status: 400 });
-  }
-  if (!validateIP(ip)) {
-    return NextResponse.json({ detail: 'Invalid IP' }, { status: 400 });
-  }
-
-  const token = `hp_${Math.random().toString(36).slice(2, 10)}`;
-  mappings.set(token, { domain, ip, protocol, path });
-
-  return NextResponse.json({ previewUrl: `/preview/${token}` });
-}
-
-export function getMapping(token: string) {
-  return mappings.get(token) || null;
 }
