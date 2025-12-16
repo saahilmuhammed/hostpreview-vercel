@@ -8,29 +8,28 @@ export default function Home() {
   const [ip, setIp] = useState("");
   const router = useRouter();
 
-  const handleSubmit = () => {
+  const handlePreview = () => {
     if (!domain || !ip) {
       alert("Domain and IP are required");
       return;
     }
 
-    const slug = domain.replace(/\./g, "_");
+    const token = domain.replace(/\./g, "_");
 
     localStorage.setItem(
-      `preview-${slug}`,
+      `preview-${token}`,
       JSON.stringify({ domain, ip })
     );
 
-    router.push(`/preview/${slug}`);
+    router.push(`/preview/${token}`);
   };
 
   return (
     <main style={{ padding: 40 }}>
-      <h1>HostPreview (CDN Bypass)</h1>
+      <h1>HostPreview</h1>
 
-      <p style={{ color: "#cc0000" }}>
-        ⚠ HTTPS preview is not supported. This tool previews the
-        origin server over HTTP only.
+      <p style={{ color: "red" }}>
+        ⚠ HTTPS preview is not supported. Origin is loaded over HTTP.
       </p>
 
       <input
@@ -38,18 +37,18 @@ export default function Home() {
         value={domain}
         onChange={(e) => setDomain(e.target.value)}
       />
-      <br />
-      <br />
+      <br /><br />
 
       <input
         placeholder="Origin IP (1.2.3.4)"
         value={ip}
         onChange={(e) => setIp(e.target.value)}
       />
-      <br />
-      <br />
+      <br /><br />
 
-      <button onClick={handleSubmit}>Preview Origin</button>
+      <button onClick={handlePreview}>
+        Preview Origin
+      </button>
     </main>
   );
 }
